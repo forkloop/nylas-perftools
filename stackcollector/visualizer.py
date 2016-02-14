@@ -2,7 +2,7 @@ import calendar
 import click
 import dateparser
 from flask import Flask, request, jsonify, render_template
-from collector import getdb
+from stackcollector.collector import getdb
 
 
 app = Flask(__name__)
@@ -71,13 +71,13 @@ def data():
             entries = db[k].split()
             value = 0
             for e in entries:
-                host, port, ts, v = e.split(':')
+                host, port, ts, v = e.decode().split(':')
                 ts = int(ts)
                 v = int(v)
                 if ((from_ is None or ts >= from_) and
                         (until is None or ts <= until)):
                     value += v
-            frames = k.split(';')
+            frames = k.decode().split(';')
             root.add(frames, value)
     return jsonify(root.serialize(threshold * root.value))
 

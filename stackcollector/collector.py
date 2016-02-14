@@ -2,11 +2,11 @@ import contextlib
 import dbm
 import time
 import click
+import logging
 import requests
 from nylas.logging import get_logger, configure_logging
 
-configure_logging()
-log = get_logger()
+log = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
@@ -31,16 +31,15 @@ def collect(dbpath, host, port):
         resp = requests.get('http://{}:{}?reset=true'.format(host, port))
         resp.raise_for_status()
     except (requests.ConnectionError, requests.HTTPError) as exc:
-        log.warning('Error collecting data', error=exc, host=host, port=port)
+        log.exception('Error collecting data from %s:%s', host, port)
         return
     data = resp.content.splitlines()
     try:
         save(data, host, port, dbpath)
     except Exception as exc:
-        log.warning('Error saving data', error=exc, host=host, port=port)
+        log.exception('Error saving data %s:%s', host, port)
         return
-    log.info('Data collected', host=host, port=port,
-             num_stacks=len(data) - 2)
+    log.info('Data collected from %s:%s, %s', host, port, num_stacks=len(data) - 2)
 
 
 def save(data, host, port, dbpath):
@@ -48,11 +47,11 @@ def save(data, host, port, dbpath):
     with getdb(dbpath) as db:
         for line in data[2:]:
             try:
-                stack, value = line.split()
+                stack, value = line.decode().split()
             except ValueError:
                 continue
 
-            entry = '{}:{}:{}:{} '.format(host, port, now, value)
+            entry = '{}:{}:{}:{} '.format(host, port, now, value).encode()
             if stack in db:
                 db[stack] += entry
             else:
