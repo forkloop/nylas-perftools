@@ -13,8 +13,9 @@ Then curl localhost:16384 to get a list of stack frames and call counts.
 """
 
 import collections
-import signal
+import threading
 import time
+import sys
 from werkzeug.serving import BaseWSGIServer, WSGIRequestHandler
 from werkzeug.wrappers import Request, Response
 from nylas.logging import get_logger
@@ -34,22 +35,25 @@ class Sampler(object):
 
     def start(self):
         self._started = time.time()
-        try:
-            signal.signal(signal.SIGVTALRM, self._sample)
-        except ValueError:
-            raise ValueError('Can only sample on the main thread')
+        t = threading.Timer(self.interval, self._sample)
+        t.start()
 
-        signal.setitimer(signal.ITIMER_VIRTUAL, self.interval, 0)
-
-    def _sample(self, signum, frame):
+    def _sample(self):
         stack = []
-        while frame is not None:
-            stack.append(self._format_frame(frame))
-            frame = frame.f_back
+        curr_thread_ident = threading.current_thread().ident
+        frames = sys._current_frames()
+        for ident, frame in frames.items():
+            if ident == curr_thread_ident:
+                continue
+            while frame is not None:
+                stack.append(self._format_frame(frame))
+                frame = frame.f_back
 
         stack = ';'.join(reversed(stack))
         self._stack_counts[stack] += 1
-        signal.setitimer(signal.ITIMER_VIRTUAL, self.interval, 0)
+
+        t = threading.Timer(self.interval, self._sample)
+        t.start()
 
     def _format_frame(self, frame):
         return '{}({})'.format(frame.f_code.co_name,
